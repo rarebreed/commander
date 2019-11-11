@@ -2,7 +2,7 @@ use futures_util::stream::{ StreamExt};
 use std::process::{ Stdio };
 use tokio::io::{ BufReader, AsyncBufReadExt };
 use tokio::process::Command;
-
+use log::{ info, error };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     // 0th arg will be 'commander'
     if args.len() < 2 {
-        eprintln!("Must supply at least 1 arg");
+        error!("Must supply at least 1 arg");
         return Ok(())
     }
 
@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let status = child.await
             .expect("child process encountered an error");
 
-        println!("child status was: {}", status);
+        info!("child status was: {}", status);
     });
 
     while let Some(line) = reader.next().await {

@@ -3,7 +3,7 @@ use std::{
   process::{ Child as ChildSync }
 };
 use log::{error, info};
-use tokio::process::{ Child as ChildAsync };
+//use tokio::process::{ Child as ChildAsync };
 
 // Unfortunately, we can't have async fn's in traits yet.  Moreover, even when they do support it,
 // you shouldn't mix and match sync traits and async traits.
