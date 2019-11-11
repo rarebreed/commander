@@ -15,18 +15,28 @@ use std::{
   time::{ Duration, Instant },
 };
 use log::{info, error};
+use tokio::process::{ Command as CommandAsync, Child as ChildAsync, ChildStdout };
+use tokio::io::{ BufReader };
 
-/// Trait for a type that can execute a command.  Eg ssh or spawn
+
+/// Trait for a type that can execute a command either synchronously or async
 pub trait Executor {
-  fn run(&mut self, opts: RunOpts) -> Result<CommandResult, CommandError>;
-  // FIXME: Remove this. This is an implementation detail.  For example, it could be run_task.
-  // fn run_thread(&mut self, opts: RunOpts) -> IoResult<JoinHandle<CommandResult>>;
+  type ExecResult;
+
+  fn run(&mut self, opts: RunOpts) -> Result<Self::ExecResult, CommandError>;
 }
+
 
 pub struct CommandResult {
   pub status: Option<ExitStatus>,
-  pub output: String,
+  pub output: String,  // FIXME: If this is a long running process, this can consume memory
   pub child: Option<Child>
+}
+
+pub struct AsyncResult {
+  pub status: Option<ExitStatus>,
+  pub output: BufReader<ChildStdout>,
+  pub child: Option<ChildAsync>
 }
 
 impl CommandResult {
@@ -80,6 +90,8 @@ impl CommandResult {
 }
 
 impl Executor for Command {
+  type ExecResult = CommandResult;
+
   /// Executes a subprocess and waits for it to complete
   fn run(&mut self, opts: RunOpts) -> Result<CommandResult, CommandError> {
     let thrd_handle = run_thread(self, opts)?;    
@@ -88,10 +100,10 @@ impl Executor for Command {
       Ok(result) => {
         match result.status {
           None => {
-            println!("No exit code for the child");
+            info!("No exit code for the child");
           },
           Some(_stat) => {
-            //println!("Exit status is {}", stat);
+            error!("Exit status is {}", _stat);
           }
         }
         Ok(result)
@@ -104,10 +116,30 @@ impl Executor for Command {
   }
 }
 
-/// This fn spawns the subprocess, and reads the stdout in a separate thread, returning the thread handle.
+impl Executor for CommandAsync {
+  type ExecResult = AsyncResult;
+
+  fn run(&mut self, _opts: RunOpts) -> Result<AsyncResult, CommandError> {
+    let mut child = self.spawn()
+        .expect("failed to spawn command");
+
+    let stdout = child.stdout().take()
+        .expect("child did not have a handle to stdout");
+
+    let reader = BufReader::new(stdout);
+    
+    Ok(AsyncResult {
+      status: None,
+      output: reader,
+      child: Some(child)
+    })
+  }
+}
+
+/// Spawns the subprocess, reads the stdout in a separate thread, and returns the thread handle.
 /// 
-/// The thread itself returns a CommandResult.  If the subprocess was unsuccessful, a CommandResult is still returned
-/// but with no status
+/// The thread itself returns a CommandResult.  If the subprocess was unsuccessful, a CommandResult
+/// is still returned but with no status
 pub fn run_thread(cmd: &mut Command, opts: RunOpts) -> IoResult<JoinHandle<CommandResult>> {
   let mut process = cmd.spawn()?;
 
@@ -129,6 +161,9 @@ mod tests {
   use super::*;
   use std::process::Stdio;
   use std::thread;
+  use tokio::runtime::Runtime;
+  use futures_util::stream::StreamExt;
+  use tokio::io::AsyncBufReadExt;
 
   #[test]
   fn test_simple() {
@@ -237,5 +272,43 @@ mod tests {
         }
       }
     }
+  }
+
+  #[test]
+  fn test_async() -> Result<(), Box<dyn std::error::Error>> {
+    // we will use tokio runtime here, since we canr use the tokio::main macro
+    let mut rt = Runtime::new()?;
+
+    rt.block_on(async {
+      let mut cmd = CommandAsync::new("iostat");
+
+      let _cmd = cmd
+        .args(vec!["2", "3"])
+        .stdout(Stdio::piped());
+
+      let opts = RunOpts::default();
+      let stat = cmd.run(opts);
+      match stat {
+        Ok(result) => {
+          if let Some(child) = result.child {
+            tokio::spawn(async {
+              let status = child.await.expect("No child process");
+              assert!(status.success());
+            });
+
+            let mut lines = result.output.lines();
+            while let Some(Ok(line)) = lines.next().await {
+              println!("{}", line);
+            }
+          }
+        },
+        Err(e) => {
+          eprintln!("Error: {}", e);
+        }
+      };
+      
+    });
+    
+    Ok(())
   }
 }

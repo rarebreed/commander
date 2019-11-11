@@ -20,8 +20,7 @@ impl CommandError {
 /// Generation of an error is completely separate from how it is displayed.
 /// There's no need to be concerned about cluttering complex logic with the display style.
 ///
-/// Note that we don't store any extra info about the errors. This means we can't state
-/// which string failed to parse without modifying our types to carry that information.
+/// Note that we don't store any extra info about the errors.
 impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
        write!(f, "error executing sub process")

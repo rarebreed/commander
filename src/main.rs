@@ -3,11 +3,22 @@ use std::process::{ Stdio };
 use tokio::io::{ BufReader, AsyncBufReadExt };
 use tokio::process::Command;
 
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::new("iostat");
-    let command = cmd.args(vec!["2", "3"]).stdout(Stdio::piped());
+    env_logger::init();
 
+    let args: Vec<String> = std::env::args().collect();
+    // 0th arg will be 'commander'
+    if args.len() < 2 {
+        eprintln!("Must supply at least 1 arg");
+        return Ok(())
+    }
+
+    // 1st arg is our main command
+    let mut cmd = Command::new(args.get(1).unwrap());
+    // any remaining values are args to the child command
+    let command = cmd.args(&args[2..]).stdout(Stdio::piped());
 
     let mut child = command.spawn()
         .expect("failed to spawn command");

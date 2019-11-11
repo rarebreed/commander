@@ -1,14 +1,17 @@
 use std::{
   io::{ Result as IoResult, Write, ErrorKind },
-  process::{ Child }
+  process::{ Child as ChildSync }
 };
 use log::{error, info};
+use tokio::process::{ Child as ChildAsync };
 
+// Unfortunately, we can't have async fn's in traits yet.  Moreover, even when they do support it,
+// you shouldn't mix and match sync traits and async traits.
 pub trait Communicate {
   fn send(&mut self, input: String) -> IoResult<()>;
 }
 
-impl Communicate for Child {
+impl Communicate for ChildSync {
   fn send(&mut self, mut input: String) -> IoResult<()> {
     match self.try_wait() {
       Ok(None) => {
